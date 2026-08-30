@@ -36,8 +36,39 @@ class ProxyServer {
     }
 
     handleIncomingRequest(req, res) {
-        res.writeHead(200);
-        res.end('Proxy Running');
+        this.performProxyRequest(req, res, 0);
+    }
+
+    performProxyRequest(req, res, retryCount) {
+        const backend = this.selectBackend();
+        
+        if (!backend) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Service Unavailable: No healthy backends' }));
+            return;
+        }
+
+        const options = {
+            host: backend.host,
+            port: backend.port,
+            path: req.url,
+            method: req.method,
+            headers: req.headers
+        };
+
+        const proxyReq = http.request(options, (proxyRes) => {
+            res.writeHead(proxyRes.statusCode, proxyRes.headers);
+            proxyRes.pipe(res);
+        });
+
+        proxyReq.on('error', (err) => {
+            if (!res.headersSent) {
+                res.writeHead(502, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Bad Gateway' }));
+            }
+        });
+
+        req.pipe(proxyReq);
     }
 }
 
