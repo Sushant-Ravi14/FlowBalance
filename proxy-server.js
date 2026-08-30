@@ -78,6 +78,7 @@ class ProxyServer extends EventEmitter {
 
         if (!backend.isHealthy) {
             backend.isHealthy = true;
+            this.emit('healthChange', { backendId: backend.id, status: 'healthy', latency: backend.latency });
         }
     }
 
@@ -86,6 +87,7 @@ class ProxyServer extends EventEmitter {
         // Mark unhealthy after 2 consecutive failures
         if (backend.failures >= 2 && backend.isHealthy) {
             backend.isHealthy = false;
+            this.emit('healthChange', { backendId: backend.id, status: 'unhealthy', latency: backend.latency });
         }
     }
 
