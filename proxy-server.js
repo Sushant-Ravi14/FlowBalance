@@ -207,4 +207,23 @@ class ProxyServer extends EventEmitter {
     }
 }
 
+// Example usage and standalone execution
+if (require.main === module) {
+    const backends = [
+        { host: '127.0.0.1', port: 3001 },
+        { host: '127.0.0.1', port: 3002 },
+        { host: '127.0.0.1', port: 3003 }
+    ];
+    
+    // Choose algorithm from environment variable or default to least-connections
+    const algorithm = process.env.ALGORITHM || 'least-connections';
+    const proxy = new ProxyServer(backends, algorithm);
+    
+    // Optional: Log events to console for demonstration
+    // proxy.on('requestRouted', evt => console.error('[EVENT] Routed:', evt));
+    // proxy.on('healthChange', evt => console.error('[EVENT] Health:', evt));
+    
+    proxy.start(8080);
+}
+
 module.exports = ProxyServer;
