@@ -21,6 +21,20 @@ class ProxyServer {
         });
     }
 
+    getHealthyBackends() {
+        return this.backends.filter(b => b.isHealthy);
+    }
+
+    selectBackend() {
+        const healthy = this.getHealthyBackends();
+        if (healthy.length === 0) return null;
+
+        // Default to round-robin
+        const backend = healthy[this.rrIndex % healthy.length];
+        this.rrIndex = (this.rrIndex + 1) % healthy.length;
+        return backend;
+    }
+
     handleIncomingRequest(req, res) {
         res.writeHead(200);
         res.end('Proxy Running');
