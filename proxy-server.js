@@ -1,7 +1,18 @@
 const http = require('http');
+const EventEmitter = require('events');
 
-class ProxyServer {
+/**
+ * FlowBalance Proxy Server
+ * A zero-dependency reverse proxy and load balancer.
+ */
+
+class ProxyServer extends EventEmitter {
+    /**
+     * @param {Array<{host: string, port: number}>} backends 
+     * @param {string} algorithm - 'round-robin' or 'least-connections'
+     */
     constructor(backends, algorithm = 'round-robin') {
+        super();
         this.backends = backends.map(b => ({
             id: `${b.host}:${b.port}`,
             host: b.host,
