@@ -44,11 +44,13 @@ class ProxyServer {
     }
 
     performProxyRequest(req, res, retryCount) {
+        const startTime = Date.now();
         const backend = this.selectBackend();
         
         if (!backend) {
             res.writeHead(503, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Service Unavailable: No healthy backends' }));
+            this.logRequest(req, null, 503, Date.now() - startTime);
             return;
         }
 
@@ -68,6 +70,8 @@ class ProxyServer {
 
             proxyRes.on('end', () => {
                 backend.activeConnections -= 1;
+                const duration = Date.now() - startTime;
+                this.logRequest(req, backend, proxyRes.statusCode, duration);
             });
         });
 
@@ -77,9 +81,25 @@ class ProxyServer {
                 res.writeHead(502, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'Bad Gateway' }));
             }
+            const duration = Date.now() - startTime;
+            this.logRequest(req, backend, 502, duration);
         });
 
         req.pipe(proxyReq);
+    }
+}
+
+    logRequest(req, backend, statusCode, duration) {
+        // Structured request logging to stdout
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            method: req.method,
+            path: req.url,
+            backend: backend ? backend.id : null,
+            responseTime: duration,
+            statusCode: statusCode
+        };
+        console.log(JSON.stringify(logEntry));
     }
 }
 
