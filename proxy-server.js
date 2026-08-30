@@ -13,12 +13,69 @@ class ProxyServer {
         }));
         this.algorithm = algorithm;
         this.rrIndex = 0;
+        this.healthCheckInterval = null;
     }
     start(port = 8080) {
         this.server = http.createServer((req, res) => this.handleIncomingRequest(req, res));
         this.server.listen(port, () => {
             console.log(`[SYSTEM] FlowBalance Proxy listening on port ${port} | Algorithm: ${this.algorithm}`);
         });
+        this.startHealthChecks();
+    }
+
+    startHealthChecks() {
+        // Run health checks every 3 seconds
+        this.healthCheckInterval = setInterval(() => {
+            this.backends.forEach(backend => this.checkHealth(backend));
+        }, 3000);
+    }
+
+    checkHealth(backend) {
+        const startTime = Date.now();
+        const req = http.request({
+            host: backend.host,
+            port: backend.port,
+            path: '/health',
+            method: 'GET',
+            timeout: 2000 // 2 second timeout for health checks
+        }, (res) => {
+            if (res.statusCode === 200) {
+                this.markHealthy(backend, Date.now() - startTime);
+            } else {
+                this.markUnhealthy(backend);
+            }
+            // Consume data to free memory
+            res.on('data', () => {}); 
+        });
+
+        req.on('error', () => {
+            this.markUnhealthy(backend);
+        });
+        
+        req.on('timeout', () => {
+            req.destroy();
+            this.markUnhealthy(backend);
+        });
+
+        req.end();
+    }
+
+    markHealthy(backend, latency) {
+        // Simple moving average for latency tracking
+        backend.latency = backend.latency === 0 ? latency : Math.round(backend.latency * 0.8 + latency * 0.2);
+        backend.failures = 0;
+
+        if (!backend.isHealthy) {
+            backend.isHealthy = true;
+        }
+    }
+
+    markUnhealthy(backend) {
+        backend.failures += 1;
+        // Mark unhealthy after 2 consecutive failures
+        if (backend.failures >= 2 && backend.isHealthy) {
+            backend.isHealthy = false;
+        }
     }
 
     getHealthyBackends() {
