@@ -147,6 +147,13 @@ class ProxyServer extends EventEmitter {
         };
 
         const proxyReq = http.request(options, (proxyRes) => {
+            if (proxyRes.statusCode >= 500 && retryCount < 1) {
+                // Graceful failover on 5xx status code mid-request
+                backend.activeConnections -= 1;
+                proxyRes.on('data', () => {}); // consume remaining
+                return this.performProxyRequest(req, res, retryCount + 1, bodyBuffer);
+            }
+
             res.writeHead(proxyRes.statusCode, proxyRes.headers);
             proxyRes.pipe(res);
 
@@ -166,7 +173,11 @@ class ProxyServer extends EventEmitter {
 
         proxyReq.on('error', (err) => {
             backend.activeConnections -= 1;
-            if (!res.headersSent) {
+            if (retryCount < 1) {
+                // Graceful failover on connection error
+                this.performProxyRequest(req, res, retryCount + 1, bodyBuffer);
+            } else {
+                if (!res.headersSent) {
                 res.writeHead(502, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'Bad Gateway' }));
             }
