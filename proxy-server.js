@@ -110,10 +110,16 @@ class ProxyServer extends EventEmitter {
     }
 
     handleIncomingRequest(req, res) {
-        this.performProxyRequest(req, res, 0);
+        // Buffer the request body so we can retry on another backend if needed
+        const chunks = [];
+        req.on('data', chunk => chunks.push(chunk));
+        req.on('end', () => {
+            const bodyBuffer = Buffer.concat(chunks);
+            this.performProxyRequest(req, res, 0, bodyBuffer);
+        });
     }
 
-    performProxyRequest(req, res, retryCount) {
+    performProxyRequest(req, res, retryCount, bodyBuffer) {
         const startTime = Date.now();
         const backend = this.selectBackend();
         
@@ -168,7 +174,11 @@ class ProxyServer extends EventEmitter {
             this.logRequest(req, backend, 502, duration);
         });
 
-        req.pipe(proxyReq);
+        // Write the buffered body
+        if (bodyBuffer.length > 0) {
+            proxyReq.write(bodyBuffer);
+        }
+        proxyReq.end();
     }
 }
 
