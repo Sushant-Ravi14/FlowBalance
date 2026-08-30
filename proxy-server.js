@@ -29,10 +29,14 @@ class ProxyServer {
         const healthy = this.getHealthyBackends();
         if (healthy.length === 0) return null;
 
-        // Default to round-robin
-        const backend = healthy[this.rrIndex % healthy.length];
-        this.rrIndex = (this.rrIndex + 1) % healthy.length;
-        return backend;
+        if (this.algorithm === 'least-connections') {
+            return healthy.reduce((min, b) => b.activeConnections < min.activeConnections ? b : min, healthy[0]);
+        } else {
+            // Default to round-robin
+            const backend = healthy[this.rrIndex % healthy.length];
+            this.rrIndex = (this.rrIndex + 1) % healthy.length;
+            return backend;
+        }
     }
 
     handleIncomingRequest(req, res) {
