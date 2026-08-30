@@ -48,6 +48,8 @@ class ProxyServer {
             return;
         }
 
+        backend.activeConnections += 1;
+
         const options = {
             host: backend.host,
             port: backend.port,
@@ -59,9 +61,14 @@ class ProxyServer {
         const proxyReq = http.request(options, (proxyRes) => {
             res.writeHead(proxyRes.statusCode, proxyRes.headers);
             proxyRes.pipe(res);
+
+            proxyRes.on('end', () => {
+                backend.activeConnections -= 1;
+            });
         });
 
         proxyReq.on('error', (err) => {
+            backend.activeConnections -= 1;
             if (!res.headersSent) {
                 res.writeHead(502, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'Bad Gateway' }));
