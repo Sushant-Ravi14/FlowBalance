@@ -125,6 +125,12 @@ class ProxyServer extends EventEmitter {
         }
 
         backend.activeConnections += 1;
+        this.emit('requestRouted', {
+            method: req.method,
+            path: req.url,
+            backendId: backend.id,
+            algorithm: this.algorithm
+        });
 
         const options = {
             host: backend.host,
@@ -142,6 +148,13 @@ class ProxyServer extends EventEmitter {
                 backend.activeConnections -= 1;
                 const duration = Date.now() - startTime;
                 this.logRequest(req, backend, proxyRes.statusCode, duration);
+                this.emit('requestCompleted', {
+                    method: req.method,
+                    path: req.url,
+                    backendId: backend.id,
+                    statusCode: proxyRes.statusCode,
+                    duration: duration
+                });
             });
         });
 
