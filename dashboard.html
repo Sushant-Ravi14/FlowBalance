@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowBalance — Real-time Proxy & Load Balancer Dashboard</title>
+    <style>
+        :root {
+            --bg-base: #0a0e17;
+            --bg-card: rgba(18, 26, 43, 0.85);
+            --bg-card-border: rgba(45, 66, 107, 0.5);
+            --accent-cyan: #00f0ff;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-amber: #f59e0b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-dim: #64748b;
+            --glow-cyan: 0 0 20px rgba(0, 240, 255, 0.35);
+            --glow-green: 0 0 20px rgba(16, 185, 129, 0.35);
+            --glow-red: 0 0 20px rgba(239, 68, 68, 0.45);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'JetBrains Mono', monospace;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(0, 240, 255, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(139, 92, 246, 0.05) 0%, transparent 40%),
+                linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 24px;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* HEADER */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--bg-card-border);
+            border-radius: 16px;
+            padding: 16px 28px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .logo-icon {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            font-weight: bold;
+            box-shadow: var(--glow-cyan);
+        }
+
+        .brand-text h1 {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            background: linear-gradient(90deg, #ffffff, var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-text p {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+
+        .header-meta {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid var(--bg-card-border);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            box-shadow: var(--glow-green);
+            animation: pulse-dot 2s infinite;
+        }
+
+        .status-dot.disconnected {
+            background: var(--accent-red);
+            box-shadow: var(--glow-red);
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        .btn-test {
+            background: linear-gradient(135deg, #0ea5e9, #6366f1);
+            color: white;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+        }
+
+        .btn-test:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(14, 165, 233, 0.45);
+        }
+
+        .btn-test:active {
+            transform: translateY(1px);
+        }
+
+        /* METRICS ROW */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        .metric-card {
+            background: var(--bg-card);
+            border: 1px solid var(--bg-card-border);
+            border-radius: 14px;
+            padding: 18px 22px;
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+            opacity: 0.6;
+        }
+
+        .metric-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .metric-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-feature-settings: "tnum";
+            font-variant-numeric: tabular-nums;
+        }
+
+        .metric-sub {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+
+        /* MAIN CONTENT SPLIT */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1.25fr 1fr;
+            gap: 20px;
+        }
+
+        .panel {
+            background: var(--bg-card);
+            border: 1px solid var(--bg-card-border);
+            border-radius: 16px;
+            padding: 20px;
+            backdrop-filter: blur(12px);
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            position: relative;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-title::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 16px;
+            background: var(--accent-cyan);
+            border-radius: 2px;
+        }
+
+        /* CANVAS CONTAINERS */
+        .canvas-wrapper {
+            position: relative;
+            width: 100%;
+            height: 380px;
+            background: rgba(10, 15, 28, 0.6);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* BOTTOM SECTION: EVENT LOG */
+        .log-section {
+            background: var(--bg-card);
+            border: 1px solid var(--bg-card-border);
+            border-radius: 16px;
+            padding: 20px;
+            backdrop-filter: blur(12px);
+        }
+
+        .log-list {
+            list-style: none;
+            max-height: 180px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace, Consolas;
+            font-size: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding-right: 6px;
+        }
+
+        .log-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .log-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        .log-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 6px 12px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 6px;
+            border-left: 3px solid var(--accent-cyan);
+            animation: fadeIn 0.2s ease-in-out;
+        }
+
+        .log-item.health-down {
+            border-left-color: var(--accent-red);
+            background: rgba(239, 68, 68, 0.08);
+        }
+
+        .log-item.health-up {
+            border-left-color: var(--accent-green);
+            background: rgba(16, 185, 129, 0.08);
+        }
+
+        .log-item.routed {
+            border-left-color: var(--accent-blue);
+        }
+
+        .log-time {
+            color: var(--text-dim);
+            font-size: 11px;
+            min-width: 75px;
+        }
+
+        .log-tag {
+            font-weight: 700;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .tag-routed { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+        .tag-req { background: rgba(0, 240, 255, 0.2); color: #38bdf8; }
+        .tag-up { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .tag-down { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+
+        .log-msg {
+            color: var(--text-secondary);
+            flex: 1;
+        }
+
+        .log-latency {
+            font-weight: bold;
+            color: var(--accent-cyan);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* TRACE PANEL STYLES */
+        .trace-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--bg-card-border);
+            border-radius: 16px;
+            padding: 20px;
+            backdrop-filter: blur(12px);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .trace-layout {
+            display: grid;
+            grid-template-columns: 1fr 1.25fr;
+            gap: 16px;
+        }
+
+        .trace-list {
+            max-height: 300px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding-right: 6px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0, 240, 255, 0.4) rgba(255, 255, 255, 0.03);
+        }
+
+        .trace-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 10px 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+
+        .trace-card:hover {
+            border-color: var(--accent-cyan);
+            background: rgba(0, 240, 255, 0.05);
+        }
+
+        .trace-card.active {
+            border-color: var(--accent-cyan);
+            background: rgba(0, 240, 255, 0.12);
+            box-shadow: 0 0 12px rgba(0, 240, 255, 0.25);
+        }
+
+        .trace-list::-webkit-scrollbar,
+        .waterfall-view::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .trace-list::-webkit-scrollbar-track,
+        .waterfall-view::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 4px;
+        }
+
+        .trace-list::-webkit-scrollbar-thumb,
+        .waterfall-view::-webkit-scrollbar-thumb {
+            background: rgba(0, 240, 255, 0.4);
+            border-radius: 4px;
+            box-shadow: 0 0 6px rgba(0, 240, 255, 0.6);
+        }
+
+        .trace-list::-webkit-scrollbar-thumb:hover,
+        .waterfall-view::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 240, 255, 0.8);
+        }
+
+        .waterfall-view {
+            background: rgba(10, 15, 28, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0, 240, 255, 0.4) rgba(255, 255, 255, 0.03);
+        }
+
+        .waterfall-stage {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .waterfall-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-secondary);
+        }
+
+        .waterfall-bar-track {
+            height: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 5px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .waterfall-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #00f0ff);
+            border-radius: 5px;
+        }
+
+        @media (max-width: 1024px) {
+            .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+            .content-grid { grid-template-columns: 1fr; }
+            .trace-layout { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- HEADER -->
+        <header>
+            <div class="brand">
+                <div class="logo-icon">⚡</div>
+                <div class="brand-text">
+                    <h1>FlowBalance</h1>
+                    <p>Zero-Dependency Load Balancer & Proxy</p>
+                </div>
+            </div>
+            <div class="header-meta">
+                <div class="badge">
+                    <span id="wsDot" class="status-dot"></span>
+                    <span id="wsStatus">Connecting...</span>
+                </div>
+                <div class="badge" style="color: var(--accent-cyan); border-color: rgba(0,240,255,0.3);">
+                    <span id="algoLabel">Algorithm: ROUND-ROBIN</span>
+                </div>
+                <button class="btn-test" id="btnBurst">⚡ Burst Test (5x)</button>
+            </div>
+        </header>
+
+        <!-- TOP METRICS -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-title">Total Requests</div>
+                <div class="metric-value" id="statTotalReqs">0</div>
+                <div class="metric-sub">Handled by Proxy</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-title">Requests / Second</div>
+                <div class="metric-value" id="statRps" style="color: var(--accent-cyan);">0.0</div>
+                <div class="metric-sub">Live Throughput</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-title">Avg Latency</div>
+                <div class="metric-value" id="statAvgLatency" style="color: var(--accent-green);">0 ms</div>
+                <div class="metric-sub" id="statMinMax">Min: 0ms | Max: 0ms</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-title">Healthy Backends</div>
+                <div class="metric-value" id="statHealthyCount" style="color: var(--accent-purple);">0 / 0</div>
+                <div class="metric-sub" id="statHealthPct">100% Operational</div>
+            </div>
+        </div>
+
+        <!-- MAIN CONTENT -->
+        <div class="content-grid">
+            <!-- TOPOLOGY VISUALIZER -->
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Live Topology & Traffic Flow</div>
+                    <span style="font-size: 11px; color: var(--text-dim);">RFC 6455 Real-time Stream</span>
+                </div>
+                <div class="canvas-wrapper">
+                    <canvas id="topologyCanvas"></canvas>
+                </div>
+            </div>
+
+            <!-- LATENCY CHART -->
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Request Latency (ms)</div>
+                    <span style="font-size: 11px; color: var(--text-dim);">Hand-drawn Canvas 2D</span>
+                </div>
+                <div class="canvas-wrapper">
+                    <canvas id="chartCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- DISTRIBUTED TRACES & WATERFALL -->
+        <div class="trace-panel">
+            <div class="panel-header">
+                <div class="panel-title">Distributed Request Traces (X-Request-Id)</div>
+                <span style="font-size: 11px; color: var(--text-dim);" id="traceCount">0 traces recorded</span>
+            </div>
+            <div class="trace-layout">
+                <div class="trace-list" id="traceList">
+                    <div style="color: var(--text-dim); font-size: 12px; padding: 12px;">Awaiting request traces...</div>
+                </div>
+                <div class="waterfall-view" id="waterfallView">
+                    <div style="color: var(--text-dim); font-size: 12px; text-align: center; margin: auto;">Select a request on the left to inspect its lifecycle waterfall.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- EVENT LOG -->
+        <div class="log-section">
+            <div class="panel-header" style="margin-bottom: 12px;">
+                <div class="panel-title">Live Event Stream</div>
+                <span style="font-size: 11px; color: var(--text-dim);" id="logCount">0 events</span>
+            </div>
+            <ul class="log-list" id="logList">
+                <li class="log-item">
+                    <span class="log-time">--:--:--</span>
+                    <span class="log-tag tag-req">INIT</span>
+                    <span class="log-msg">Waiting for WebSocket connection to FlowBalance Proxy...</span>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+
+    <script>
+        // ==========================================
+        // STATE & DATA
+        // ==========================================
+        const state = {
+            backends: [],
+            algorithm: 'round-robin',
+            totalRequests: 0,
+            recentRequests: [],
+            latencyHistory: [], // array of { time: timestamp, latency: ms, status: code }
+            traces: [],          // array of recent completed traces
+            selectedTraceId: null,
+            particles: [],       // active particles animating across topology
+            rpsCounter: 0,
+            lastRpsCalc: Date.now()
+        };
+
+        // ==========================================
+        // WEBSOCKET CLIENT (RFC 6455 Browser Native)
+        // ==========================================
+        let ws = null;
+        const wsDot = document.getElementById('wsDot');
+        const wsStatus = document.getElementById('wsStatus');
+
+        function connectWebSocket() {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            // Default to current host or localhost:8080 if file://
+            const host = location.host || '127.0.0.1:8080';
+            const wsUrl = `${protocol}//${host}`;
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                wsDot.classList.remove('disconnected');
+                wsStatus.textContent = 'CONNECTED (RFC 6455)';
+                addLog('WS', 'Connected to FlowBalance WebSocket Hub', 'tag-up');
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleServerEvent(data);
+                } catch (e) {
+                    console.error('Error parsing WebSocket message:', e);
+                }
+            };
+
+            ws.onclose = () => {
+                wsDot.classList.add('disconnected');
+                wsStatus.textContent = 'RECONNECTING...';
+                setTimeout(connectWebSocket, 2000);
+            };
+
+            ws.onerror = () => {
+                ws.close();
+            };
+        }
+
+        // ==========================================
+        // EVENT HANDLER
+        // ==========================================
+        function handleServerEvent(evt) {
+            if (evt.type === 'init') {
+                state.algorithm = evt.algorithm || 'round-robin';
+                state.backends = evt.backends || [];
+                document.getElementById('algoLabel').textContent = `Algorithm: ${state.algorithm.toUpperCase()}`;
+                updateStats();
+                addLog('INIT', `Initialized with ${state.backends.length} backend nodes.`, 'tag-req');
+            } 
+            else if (evt.type === 'routed') {
+                spawnParticle(evt.backendId);
+                addLog('ROUTED', `${evt.method} ${evt.path} → ${evt.backendId}`, 'tag-routed');
+            } 
+            else if (evt.type === 'request') {
+                state.totalRequests++;
+                state.rpsCounter++;
+                
+                if (evt.backends) state.backends = evt.backends;
+
+                // Push to latency chart history (keep last 60 points)
+                state.latencyHistory.push({
+                    time: evt.timestamp || Date.now(),
+                    latency: evt.latency || 0,
+                    status: evt.status || 200
+                });
+                if (state.latencyHistory.length > 60) {
+                    state.latencyHistory.shift();
+                }
+
+                updateStats();
+                addLog('RESP', `${evt.method || 'GET'} ${evt.path || '/'} [${evt.status}] completed via ${evt.backend}`, 'tag-req', `${evt.latency}ms`);
+            } 
+            else if (evt.type === 'health') {
+                if (evt.backends) state.backends = evt.backends;
+                const statusTag = evt.healthy ? 'tag-up' : 'tag-down';
+                const statusClass = evt.healthy ? 'health-up' : 'health-down';
+                addLog('HEALTH', `Backend ${evt.backend} is now ${evt.healthy ? 'HEALTHY' : 'UNHEALTHY'} (${evt.latency}ms)`, statusTag, '', statusClass);
+                updateStats();
+            }
+            else if (evt.type === 'circuit_state') {
+                const target = state.backends.find(b => b.id === evt.backend);
+                if (target) target.circuitState = evt.state;
+                const tagClass = evt.state === 'CLOSED' ? 'tag-up' : (evt.state === 'HALF_OPEN' ? 'tag-req' : 'tag-down');
+                const logClass = evt.state === 'OPEN' ? 'health-down' : (evt.state === 'HALF_OPEN' ? 'health-up' : '');
+                addLog('CIRCUIT', `⚡ Circuit Breaker [${evt.backend}] tripped to ${evt.state}`, tagClass, '', logClass);
+                updateStats();
+            }
+            else if (evt.type === 'rate_limited') {
+                addLog('429 LIMIT', `🛑 Client [${evt.ip}] rate limited! Retry-After: ${evt.retryAfter}s`, 'tag-down', `${evt.retryAfter}s`, 'health-down');
+            }
+            else if (evt.type === 'trace') {
+                handleNewTrace(evt);
+            }
+        }
+
+        // ==========================================
+        // TRACING & WATERFALL LOGIC
+        // ==========================================
+        function handleNewTrace(trace) {
+            state.traces.unshift(trace);
+            if (state.traces.length > 40) state.traces.pop();
+
+            document.getElementById('traceCount').textContent = `${state.traces.length} traces in memory`;
+            renderTraceList();
+
+            // Auto-select first trace if none selected
+            if (!state.selectedTraceId) {
+                selectTrace(trace.requestId);
+            } else if (state.selectedTraceId === trace.requestId) {
+                renderWaterfall(trace);
+            }
+        }
+
+        function renderTraceList() {
+            const listEl = document.getElementById('traceList');
+            if (state.traces.length === 0) {
+                listEl.innerHTML = '<div style="color: var(--text-dim); font-size: 12px; padding: 12px;">Awaiting request traces...</div>';
+                return;
+            }
+
+            listEl.innerHTML = state.traces.map(t => {
+                const isSelected = t.requestId === state.selectedTraceId ? 'active' : '';
+                const shortId = t.requestId.substring(0, 8);
+                const statusColor = t.status >= 500 ? '#ef4444' : (t.status === 429 ? '#f59e0b' : '#10b981');
+                return `
+                    <div class="trace-card ${isSelected}" onclick="selectTrace('${t.requestId}')">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-weight: bold; color: var(--accent-cyan);">#${shortId}</span>
+                            <span style="color: var(--text-primary); font-size: 11px;">${t.method} ${t.path}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 11px; font-weight: bold; color: ${statusColor};">${t.status || 200}</span>
+                            <span style="color: var(--accent-cyan); font-weight: bold; font-size: 11px;">${t.totalDuration}ms</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function selectTrace(requestId) {
+            state.selectedTraceId = requestId;
+            renderTraceList();
+
+            const trace = state.traces.find(t => t.requestId === requestId);
+            if (trace) {
+                renderWaterfall(trace);
+            }
+        }
+
+        function renderWaterfall(trace) {
+            const viewEl = document.getElementById('waterfallView');
+            if (!trace) return;
+
+            const total = Math.max(1, trace.totalDuration);
+            const stages = trace.stages || [];
+
+            let html = `
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px; margin-bottom: 8px;">
+                    <div>
+                        <span style="font-weight: bold; color: var(--accent-cyan); font-family: monospace;">UUID: ${trace.requestId}</span>
+                        <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">IP: ${trace.clientIp} | Total: ${trace.totalDuration}ms</div>
+                    </div>
+                    <a href="/trace/${trace.requestId}" target="_blank" style="color: var(--accent-cyan); font-size: 11px; text-decoration: none; border: 1px solid rgba(0,240,255,0.4); padding: 4px 8px; border-radius: 4px;">GET /trace/${trace.requestId.substring(0,8)} ↗</a>
+                </div>
+            `;
+
+            html += stages.map((s, idx) => {
+                const stageDuration = s.durationMs || 0;
+                const offset = s.offsetMs || 0;
+                const offsetPct = Math.min(95, (offset / total) * 100);
+                const widthPct = Math.max(5, Math.min(100 - offsetPct, (Math.max(1, stageDuration) / total) * 100));
+
+                let stageColor = 'linear-gradient(90deg, #3b82f6, #00f0ff)';
+                if (s.name === 'rate_limit_check' && s.details && !s.details.allowed) {
+                    stageColor = 'linear-gradient(90deg, #f59e0b, #ef4444)';
+                } else if (s.name === 'backend_error' || (s.details && s.details.status >= 500)) {
+                    stageColor = 'linear-gradient(90deg, #ef4444, #dc2626)';
+                }
+
+                return `
+                    <div class="waterfall-stage">
+                        <div class="waterfall-label">
+                            <span><strong>${idx + 1}. ${s.name.toUpperCase()}</strong> ${s.details && s.details.backend ? `[${s.details.backend}]` : ''}</span>
+                            <span>+${s.offsetMs}ms (${stageDuration}ms)</span>
+                        </div>
+                        <div class="waterfall-bar-track">
+                            <div class="waterfall-bar-fill" style="margin-left: ${offsetPct}%; width: ${widthPct}%; background: ${stageColor};"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            viewEl.innerHTML = html;
+        }
+
+
+
+        // ==========================================
+        // STATS CALCULATION
+        // ==========================================
+        function updateStats() {
+            document.getElementById('statTotalReqs').textContent = state.totalRequests.toLocaleString();
+
+            const healthyCount = state.backends.filter(b => b.isHealthy).length;
+            const totalBackends = state.backends.length;
+            document.getElementById('statHealthyCount').textContent = `${healthyCount} / ${totalBackends}`;
+            
+            const healthPct = totalBackends > 0 ? Math.round((healthyCount / totalBackends) * 100) : 0;
+            document.getElementById('statHealthPct').textContent = `${healthPct}% Operational`;
+
+            if (state.latencyHistory.length > 0) {
+                const latencies = state.latencyHistory.map(d => d.latency);
+                const avg = Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length);
+                const min = Math.min(...latencies);
+                const max = Math.max(...latencies);
+                document.getElementById('statAvgLatency').textContent = `${avg} ms`;
+                document.getElementById('statMinMax').textContent = `Min: ${min}ms | Max: ${max}ms`;
+            }
+        }
+
+        // RPS Calculation Loop (1 sec interval)
+        setInterval(() => {
+            const now = Date.now();
+            const elapsed = (now - state.lastRpsCalc) / 1000;
+            const rps = (state.rpsCounter / elapsed).toFixed(1);
+            document.getElementById('statRps').textContent = rps;
+            state.rpsCounter = 0;
+            state.lastRpsCalc = now;
+        }, 1000);
+
+        // ==========================================
+        // LOG FEED
+        // ==========================================
+        const logList = document.getElementById('logList');
+        let logCounter = 0;
+
+        function addLog(tag, message, tagClass = 'tag-req', latency = '', extraClass = '') {
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+
+            const li = document.createElement('li');
+            li.className = `log-item ${extraClass}`;
+            li.innerHTML = `
+                <span class="log-time">${timeStr}</span>
+                <span class="log-tag ${tagClass}">${tag}</span>
+                <span class="log-msg">${message}</span>
+                ${latency ? `<span class="log-latency">${latency}</span>` : ''}
+            `;
+
+            logList.insertBefore(li, logList.firstChild);
+            logCounter++;
+            document.getElementById('logCount').textContent = `${logCounter} events`;
+
+            if (logList.children.length > 50) {
+                logList.removeChild(logList.lastChild);
+            }
+        }
+
+        // ==========================================
+        // TOPOLOGY CANVAS VISUALIZER
+        // ==========================================
+        const topoCanvas = document.getElementById('topologyCanvas');
+        const topoCtx = topoCanvas.getContext('2d');
+
+        function resizeCanvas(canvas) {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            if (canvas.width !== rect.width || canvas.height !== rect.height) {
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+            }
+        }
+
+        function spawnParticle(backendId) {
+            state.particles.push({
+                backendId: backendId,
+                progress: 0,
+                speed: 0.02 + Math.random() * 0.015,
+                size: 4 + Math.random() * 2
+            });
+        }
+
+        function drawTopology() {
+            resizeCanvas(topoCanvas);
+            const w = topoCanvas.width;
+            const h = topoCanvas.height;
+
+            topoCtx.clearRect(0, 0, w, h);
+
+            if (w === 0 || h === 0) return;
+
+            // Proxy Node Position (Left)
+            const proxyNode = {
+                x: w * 0.2,
+                y: h * 0.5,
+                radius: 36,
+                label: 'FlowBalance',
+                sub: 'Reverse Proxy'
+            };
+
+            // Calculate Backend Node Positions (Right Column)
+            const backendCount = state.backends.length || 3;
+            const backendNodes = [];
+
+            for (let i = 0; i < backendCount; i++) {
+                const b = state.backends[i] || { id: `127.0.0.1:300${i+1}`, isHealthy: true, latency: 50, activeConnections: 0 };
+                const ySpacing = h / (backendCount + 1);
+                backendNodes.push({
+                    ...b,
+                    x: w * 0.78,
+                    y: ySpacing * (i + 1),
+                    radius: 28
+                });
+            }
+
+            // 1. Draw Connecting Curves
+            backendNodes.forEach((bNode) => {
+                topoCtx.beginPath();
+                topoCtx.moveTo(proxyNode.x, proxyNode.y);
+                
+                // Smooth cubic bezier
+                const cp1x = proxyNode.x + (bNode.x - proxyNode.x) * 0.5;
+                const cp1y = proxyNode.y;
+                const cp2x = proxyNode.x + (bNode.x - proxyNode.x) * 0.5;
+                const cp2y = bNode.y;
+                
+                topoCtx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, bNode.x, bNode.y);
+                
+                if (bNode.isHealthy) {
+                    topoCtx.strokeStyle = 'rgba(59, 130, 246, 0.25)';
+                    topoCtx.lineWidth = 2;
+                } else {
+                    topoCtx.strokeStyle = 'rgba(239, 68, 68, 0.25)';
+                    topoCtx.lineWidth = 1.5;
+                    topoCtx.setLineDash([4, 4]);
+                }
+                topoCtx.stroke();
+                topoCtx.setLineDash([]);
+            });
+
+            // 2. Animate and Draw Flow Particles
+            for (let i = state.particles.length - 1; i >= 0; i--) {
+                const p = state.particles[i];
+                p.progress += p.speed;
+
+                const targetNode = backendNodes.find(b => b.id === p.backendId) || backendNodes[0];
+                if (!targetNode) continue;
+
+                // Cubic Bezier interpolation
+                const t = p.progress;
+                const p0 = { x: proxyNode.x, y: proxyNode.y };
+                const p1 = { x: proxyNode.x + (targetNode.x - proxyNode.x) * 0.5, y: proxyNode.y };
+                const p2 = { x: proxyNode.x + (targetNode.x - proxyNode.x) * 0.5, y: targetNode.y };
+                const p3 = { x: targetNode.x, y: targetNode.y };
+
+                const cx = (1 - t)**3 * p0.x + 3*(1 - t)**2 * t * p1.x + 3*(1 - t) * t**2 * p2.x + t**3 * p3.x;
+                const cy = (1 - t)**3 * p0.y + 3*(1 - t)**2 * t * p1.y + 3*(1 - t) * t**2 * p2.y + t**3 * p3.y;
+
+                // Draw glowing particle
+                topoCtx.beginPath();
+                topoCtx.arc(cx, cy, p.size, 0, Math.PI * 2);
+                topoCtx.fillStyle = '#00f0ff';
+                topoCtx.shadowColor = '#00f0ff';
+                topoCtx.shadowBlur = 12;
+                topoCtx.fill();
+                topoCtx.shadowBlur = 0; // reset
+
+                if (p.progress >= 1) {
+                    state.particles.splice(i, 1);
+                }
+            }
+
+            // 3. Draw Proxy Node
+            topoCtx.beginPath();
+            topoCtx.arc(proxyNode.x, proxyNode.y, proxyNode.radius, 0, Math.PI * 2);
+            topoCtx.fillStyle = '#1e293b';
+            topoCtx.strokeStyle = '#00f0ff';
+            topoCtx.lineWidth = 3;
+            topoCtx.shadowColor = '#00f0ff';
+            topoCtx.shadowBlur = 16;
+            topoCtx.fill();
+            topoCtx.stroke();
+            topoCtx.shadowBlur = 0;
+
+            // Proxy Icon & Text
+            topoCtx.fillStyle = '#ffffff';
+            topoCtx.font = 'bold 12px sans-serif';
+            topoCtx.textAlign = 'center';
+            topoCtx.fillText('⚡ PROXY', proxyNode.x, proxyNode.y - 2);
+            topoCtx.fillStyle = '#94a3b8';
+            topoCtx.font = '10px sans-serif';
+            topoCtx.fillText(':8080', proxyNode.x, proxyNode.y + 12);
+
+            // 4. Draw Backend Nodes
+            backendNodes.forEach((bNode) => {
+                const isCircuitOpen = bNode.circuitState === 'OPEN';
+                const isCircuitHalf = bNode.circuitState === 'HALF_OPEN';
+                
+                let strokeColor = '#10b981';
+                if (!bNode.isHealthy || isCircuitOpen) {
+                    strokeColor = '#ef4444';
+                } else if (isCircuitHalf) {
+                    strokeColor = '#f59e0b';
+                }
+
+                topoCtx.beginPath();
+                topoCtx.arc(bNode.x, bNode.y, bNode.radius, 0, Math.PI * 2);
+                topoCtx.fillStyle = '#1e293b';
+                topoCtx.strokeStyle = strokeColor;
+                topoCtx.lineWidth = 3;
+                topoCtx.shadowColor = strokeColor;
+                topoCtx.shadowBlur = (isCircuitOpen || !bNode.isHealthy) ? 20 : 14;
+                topoCtx.fill();
+                topoCtx.stroke();
+                topoCtx.shadowBlur = 0;
+
+                // Backend Text Info
+                topoCtx.fillStyle = '#ffffff';
+                topoCtx.font = 'bold 11px monospace';
+                topoCtx.textAlign = 'center';
+                const portStr = bNode.id ? bNode.id.split(':')[1] || bNode.id : 'NODE';
+                topoCtx.fillText(`:${portStr}`, bNode.x, bNode.y - 2);
+
+                topoCtx.fillStyle = strokeColor;
+                topoCtx.font = 'bold 9px sans-serif';
+                let statusLabel = bNode.isHealthy ? 'HEALTHY' : 'DOWN';
+                if (isCircuitOpen) statusLabel = 'CB: OPEN';
+                else if (isCircuitHalf) statusLabel = 'CB: HALF';
+                topoCtx.fillText(statusLabel, bNode.x, bNode.y + 11);
+
+                // Side Stats (Latency, Conns & Circuit Breaker)
+                topoCtx.textAlign = 'left';
+                topoCtx.fillStyle = '#94a3b8';
+                topoCtx.font = '11px sans-serif';
+                topoCtx.fillText(`Active: ${bNode.activeConnections || 0}`, bNode.x + 36, bNode.y - 4);
+                topoCtx.fillStyle = '#38bdf8';
+                topoCtx.fillText(`Ping: ${bNode.latency || 0}ms`, bNode.x + 36, bNode.y + 10);
+                topoCtx.fillStyle = strokeColor;
+                topoCtx.font = '9px monospace';
+                topoCtx.fillText(`[${bNode.circuitState || 'CLOSED'}]`, bNode.x + 36, bNode.y + 24);
+            });
+
+        }
+
+        // ==========================================
+        // LATENCY CHART (RAW CANVAS 2D DRAWING)
+        // ==========================================
+        const chartCanvas = document.getElementById('chartCanvas');
+        const chartCtx = chartCanvas.getContext('2d');
+
+        function drawLatencyChart() {
+            resizeCanvas(chartCanvas);
+            const w = chartCanvas.width;
+            const h = chartCanvas.height;
+
+            chartCtx.clearRect(0, 0, w, h);
+            if (w === 0 || h === 0) return;
+
+            const padding = { top: 30, right: 30, bottom: 40, left: 50 };
+            const chartW = w - padding.left - padding.right;
+            const chartH = h - padding.top - padding.bottom;
+
+            // Max Y calculation with margin
+            const maxVal = Math.max(350, ...state.latencyHistory.map(d => d.latency)) * 1.15;
+
+            // 1. Draw Grid Lines & Y-Axis Labels
+            chartCtx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+            chartCtx.lineWidth = 1;
+            chartCtx.fillStyle = '#64748b';
+            chartCtx.font = '10px monospace';
+            chartCtx.textAlign = 'right';
+
+            const gridSteps = 4;
+            for (let i = 0; i <= gridSteps; i++) {
+                const yVal = Math.round((maxVal / gridSteps) * i);
+                const yPos = padding.top + chartH - (i / gridSteps) * chartH;
+
+                chartCtx.beginPath();
+                chartCtx.moveTo(padding.left, yPos);
+                chartCtx.lineTo(padding.left + chartW, yPos);
+                chartCtx.stroke();
+
+                chartCtx.fillText(`${yVal}ms`, padding.left - 10, yPos + 3);
+            }
+
+            if (state.latencyHistory.length < 2) {
+                // Empty state message
+                chartCtx.fillStyle = '#64748b';
+                chartCtx.textAlign = 'center';
+                chartCtx.font = '13px sans-serif';
+                chartCtx.fillText('Awaiting requests to plot latency...', padding.left + chartW / 2, padding.top + chartH / 2);
+                return;
+            }
+
+            // 2. Compute Data Points
+            const points = state.latencyHistory.map((d, index) => {
+                const x = padding.left + (index / (state.latencyHistory.length - 1)) * chartW;
+                const y = padding.top + chartH - (d.latency / maxVal) * chartH;
+                return { x, y, latency: d.latency, status: d.status };
+            });
+
+            // 3. Draw Gradient Area under Curve
+            const areaGrad = chartCtx.createLinearGradient(0, padding.top, 0, padding.top + chartH);
+            areaGrad.addColorStop(0, 'rgba(0, 240, 255, 0.35)');
+            areaGrad.addColorStop(1, 'rgba(0, 240, 255, 0.0)');
+
+            chartCtx.beginPath();
+            chartCtx.moveTo(points[0].x, padding.top + chartH);
+            for (let i = 0; i < points.length; i++) {
+                chartCtx.lineTo(points[i].x, points[i].y);
+            }
+            chartCtx.lineTo(points[points.length - 1].x, padding.top + chartH);
+            chartCtx.closePath();
+            chartCtx.fillStyle = areaGrad;
+            chartCtx.fill();
+
+            // 4. Draw Line Stroke
+            chartCtx.beginPath();
+            chartCtx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                chartCtx.lineTo(points[i].x, points[i].y);
+            }
+            chartCtx.strokeStyle = '#00f0ff';
+            chartCtx.lineWidth = 2.5;
+            chartCtx.shadowColor = '#00f0ff';
+            chartCtx.shadowBlur = 10;
+            chartCtx.stroke();
+            chartCtx.shadowBlur = 0;
+
+            // 5. Draw Data Dots
+            points.forEach((p, idx) => {
+                // Highlight last point or errors
+                if (idx === points.length - 1 || p.status >= 500) {
+                    chartCtx.beginPath();
+                    chartCtx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+                    chartCtx.fillStyle = p.status >= 500 ? '#ef4444' : '#ffffff';
+                    chartCtx.strokeStyle = '#00f0ff';
+                    chartCtx.lineWidth = 2;
+                    chartCtx.fill();
+                    chartCtx.stroke();
+                }
+            });
+        }
+
+        // ==========================================
+        // ANIMATION LOOP (60 FPS)
+        // ==========================================
+        function animate() {
+            drawTopology();
+            drawLatencyChart();
+            requestAnimationFrame(animate);
+        }
+
+        // ==========================================
+        // BURST TEST BUTTON
+        // ==========================================
+        document.getElementById('btnBurst').addEventListener('click', () => {
+            for (let i = 0; i < 5; i++) {
+                setTimeout(() => {
+                    fetch('/api/test', { method: 'GET' }).catch(() => {});
+                }, i * 150);
+            }
+        });
+
+        // Initialize
+        connectWebSocket();
+        animate();
+    </script>
+</body>
+</html>
