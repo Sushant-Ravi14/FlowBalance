@@ -77,8 +77,8 @@ In modern production architectures, running services on a **single server is a c
                                                            |
                                                            v
                                          +------------------------------------+
-                                         |     Live Cyberpunk Dashboard       |
-                                         |   (Canvas 2D Topology & Waterfall) |
+                                         |            Live  Dashboard         |
+                                         |                                    |
                                          +------------------------------------+
 ```
 
