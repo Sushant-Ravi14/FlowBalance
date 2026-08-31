@@ -3,6 +3,7 @@ const https = require('https');
 const tls = require('tls');
 const fs = require('fs');
 const path = require('path');
+const { fork } = require('child_process');
 const EventEmitter = require('events');
 const WebSocketServer = require('./websocket-server');
 const TokenBucketRateLimiter = require('./rate-limiter');
@@ -44,6 +45,10 @@ class ProxyServer extends EventEmitter {
         this.healthCheckInterval = null;
         this.wss = null;
 
+        // Process management for on-demand UI controls
+        this.managedProcesses = new Map(); // port -> ChildProcess
+        this.trafficProcess = null; // ChildProcess for traffic-generator
+
         // TLS Configuration
         this.useTls = options.useTls || process.env.USE_TLS === 'true';
         this.sslKeyPath = options.sslKeyPath || process.env.SSL_KEY_PATH || path.join(__dirname, 'key.pem');
@@ -76,7 +81,7 @@ class ProxyServer extends EventEmitter {
         });
     }
 
-    start(port = 8080) {
+    start(port = 8080, host = '0.0.0.0') {
         const requestHandler = (req, res) => this.handleIncomingRequest(req, res);
 
         if (this.useTls) {
@@ -102,10 +107,10 @@ class ProxyServer extends EventEmitter {
         this.wss = new WebSocketServer({ server: this.server });
         this.wss.wireToProxy(this);
 
-        this.server.listen(port, () => {
+        this.server.listen(port, host, () => {
             const proto = this.useTls ? 'https' : 'http';
-            console.log(`[SYSTEM] FlowBalance Proxy listening on ${proto}://127.0.0.1:${port} | Algorithm: ${this.algorithm}`);
-            console.log(`[SYSTEM] Live Dashboard available at ${proto}://127.0.0.1:${port}/dashboard`);
+            console.log(`[SYSTEM] FlowBalance Proxy listening on ${proto}://${host}:${port} | Algorithm: ${this.algorithm}`);
+            console.log(`[SYSTEM] Live Dashboard available at ${proto}://${host}:${port}/dashboard`);
             console.log(`[SYSTEM] Rate Limiter: ${this.rateLimiter.rps} req/s (Burst: ${this.rateLimiter.burst})`);
             console.log(`[SYSTEM] Circuit Breaker: Trip after ${this.circuitBreaker.failureThreshold} consecutive failures`);
             console.log(`[SYSTEM] Request Tracer: Ring buffer tracking last ${this.tracer.maxTraces} requests`);
@@ -197,6 +202,116 @@ class ProxyServer extends EventEmitter {
         return req.socket.remoteAddress || '127.0.0.1';
     }
 
+    // Backend & Traffic Process Management Subsystem
+    startBackend(port) {
+        port = parseInt(port, 10);
+        if (this.managedProcesses.has(port)) {
+            return { success: true, message: `Backend ${port} already running`, port };
+        }
+        const backendScript = path.join(__dirname, 'backend.js');
+        const child = fork(backendScript, [port.toString()], {
+            stdio: ['ignore', 'pipe', 'pipe', 'ipc']
+        });
+        if (child.stdout) child.stdout.on('data', (d) => console.log(`[B:${port}] ${d.toString().trim()}`));
+        if (child.stderr) child.stderr.on('data', (d) => console.error(`[B:${port} ERR] ${d.toString().trim()}`));
+        child.on('exit', () => {
+            console.log(`[SYSTEM] Backend ${port} process exited.`);
+            this.managedProcesses.delete(port);
+            const b = this.backends.find(x => x.port === port);
+            if (b) this.markUnhealthy(b);
+        });
+        this.managedProcesses.set(port, child);
+        console.log(`[SYSTEM] Started backend server on port ${port} (PID: ${child.pid})`);
+        return { success: true, message: `Backend ${port} started`, port, pid: child.pid };
+    }
+
+    stopBackend(port) {
+        port = parseInt(port, 10);
+        const child = this.managedProcesses.get(port);
+        if (child) {
+            child.kill('SIGTERM');
+            this.managedProcesses.delete(port);
+            const b = this.backends.find(x => x.port === port);
+            if (b) this.markUnhealthy(b);
+            console.log(`[SYSTEM] Stopped backend server on port ${port}`);
+            return { success: true, message: `Backend ${port} stopped`, port };
+        }
+        return { success: false, message: `Backend ${port} not running under management`, port };
+    }
+
+    toggleBackend(port) {
+        port = parseInt(port, 10);
+        if (this.managedProcesses.has(port)) {
+            return this.stopBackend(port);
+        } else {
+            return this.startBackend(port);
+        }
+    }
+
+    startTraffic(targetUrl) {
+        if (this.trafficProcess) {
+            return { success: true, message: 'Traffic generator is already running' };
+        }
+        const target = targetUrl || `http://127.0.0.1:${this.server ? this.server.address().port : 8080}/api/traffic`;
+        const trafficScript = path.join(__dirname, 'traffic-generator.js');
+        const child = fork(trafficScript, [target], {
+            stdio: ['ignore', 'pipe', 'pipe', 'ipc']
+        });
+        if (child.stdout) child.stdout.on('data', (d) => console.log(`[TRAFFIC] ${d.toString().trim()}`));
+        if (child.stderr) child.stderr.on('data', (d) => console.error(`[TRAFFIC ERR] ${d.toString().trim()}`));
+        child.on('exit', () => {
+            console.log('[SYSTEM] Traffic generator stopped.');
+            this.trafficProcess = null;
+        });
+        this.trafficProcess = child;
+        console.log(`[SYSTEM] Traffic generator started (PID: ${child.pid}) -> Target: ${target}`);
+        return { success: true, message: 'Traffic generator started', pid: child.pid };
+    }
+
+    stopTraffic() {
+        if (this.trafficProcess) {
+            this.trafficProcess.kill('SIGTERM');
+            this.trafficProcess = null;
+            console.log('[SYSTEM] Traffic generator stopped.');
+            return { success: true, message: 'Traffic generator stopped' };
+        }
+        return { success: false, message: 'Traffic generator is not running' };
+    }
+
+    toggleTraffic(targetUrl) {
+        if (this.trafficProcess) {
+            return this.stopTraffic();
+        } else {
+            return this.startTraffic(targetUrl);
+        }
+    }
+
+    getControlStatus() {
+        const backends = {};
+        for (const b of this.backends) {
+            backends[b.port] = {
+                running: this.managedProcesses.has(b.port),
+                healthy: b.isHealthy,
+                latency: b.latency,
+                activeConnections: b.activeConnections
+            };
+        }
+        return {
+            algorithm: this.algorithm,
+            backends,
+            trafficRunning: !!this.trafficProcess
+        };
+    }
+
+    stop() {
+        if (this.healthCheckInterval) clearInterval(this.healthCheckInterval);
+        for (const [port, child] of this.managedProcesses.entries()) {
+            child.kill();
+        }
+        if (this.trafficProcess) this.trafficProcess.kill();
+        if (this.server) this.server.close();
+    }
+
     handleIncomingRequest(req, res) {
         const cleanUrl = req.url.split('?')[0];
 
@@ -208,6 +323,57 @@ class ProxyServer extends EventEmitter {
                 fs.createReadStream(dashboardPath).pipe(res);
                 return;
             }
+        }
+
+        // 1.5 Server & Traffic Control API Endpoints
+        if (cleanUrl.startsWith('/api/control/')) {
+            const urlObj = new URL(req.url, 'http://localhost');
+            const action = cleanUrl.replace('/api/control/', '');
+            const port = parseInt(urlObj.searchParams.get('port'), 10);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            if (action === 'status') {
+                res.end(JSON.stringify(this.getControlStatus()));
+            } else if (action === 'backend/start' && port) {
+                res.end(JSON.stringify(this.startBackend(port)));
+            } else if (action === 'backend/stop' && port) {
+                res.end(JSON.stringify(this.stopBackend(port)));
+            } else if (action === 'backend/toggle' && port) {
+                res.end(JSON.stringify(this.toggleBackend(port)));
+            } else if (action === 'traffic/start') {
+                res.end(JSON.stringify(this.startTraffic()));
+            } else if (action === 'traffic/stop') {
+                res.end(JSON.stringify(this.stopTraffic()));
+            } else if (action === 'traffic/toggle') {
+                res.end(JSON.stringify(this.toggleTraffic()));
+            } else if (action === 'algorithm') {
+                const requestedAlgo = urlObj.searchParams.get('algo');
+                if (requestedAlgo && (requestedAlgo === 'round-robin' || requestedAlgo === 'least-connections')) {
+                    this.algorithm = requestedAlgo;
+                } else {
+                    this.algorithm = this.algorithm === 'round-robin' ? 'least-connections' : 'round-robin';
+                }
+                if (this.wss) {
+                    this.wss.broadcast({
+                        type: 'init',
+                        algorithm: this.algorithm,
+                        backends: this.backends.map(b => ({
+                            id: b.id,
+                            host: b.host,
+                            port: b.port,
+                            isHealthy: b.isHealthy,
+                            circuitState: this.circuitBreaker.getState(b.id),
+                            activeConnections: b.activeConnections,
+                            latency: b.latency
+                        }))
+                    });
+                }
+                res.end(JSON.stringify({ success: true, algorithm: this.algorithm }));
+            } else {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Unknown control action' }));
+            }
+            return;
         }
 
         // 2. Trace Inspection Endpoints (/trace/:requestId and /traces)
@@ -424,16 +590,41 @@ class ProxyServer extends EventEmitter {
 
 // Standalone execution entrypoint
 if (require.main === module) {
-    const backends = [
+    let backends = [
         { host: '127.0.0.1', port: 3001 },
         { host: '127.0.0.1', port: 3002 },
         { host: '127.0.0.1', port: 3003 }
     ];
+
+    if (process.env.BACKENDS) {
+        backends = process.env.BACKENDS.split(',').map(entry => {
+            const trimmed = entry.trim().replace(/^https?:\/\//, '');
+            const parts = trimmed.split(':');
+            return { host: parts[0] || '127.0.0.1', port: parseInt(parts[1], 10) || 80 };
+        });
+    }
     
-    const algorithm = process.env.ALGORITHM || 'least-connections';
+    const algorithm = process.env.ALGORITHM || 'round-robin';
     const proxy = new ProxyServer(backends, { algorithm });
     
-    proxy.start(8080);
+    const port = parseInt(process.env.PORT, 10) || 8080;
+    const host = process.env.HOST || '0.0.0.0';
+    proxy.start(port, host);
+
+    // Auto-start backend child processes unless running external backends
+    if (process.env.AUTO_START_BACKENDS !== 'false' && !process.env.BACKENDS) {
+        backends.forEach(b => proxy.startBackend(b.port));
+    }
+
+    // Graceful process exit
+    const cleanup = () => {
+        console.log('\n[SYSTEM] Gracefully shutting down FlowBalance and child processes...');
+        proxy.stop();
+        process.exit(0);
+    };
+
+    process.on('SIGINT', cleanup);
+    process.on('SIGTERM', cleanup);
 }
 
 module.exports = ProxyServer;

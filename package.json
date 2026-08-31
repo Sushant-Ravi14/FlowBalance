@@ -1,0 +1,24 @@
+﻿{
+  "name": "flowbalance",
+  "version": "1.0.0",
+  "description": "High-Performance Zero-Dependency Reverse Proxy, Load Balancer & Real-Time Cyberpunk Observability Hub for Node.js",
+  "main": "proxy-server.js",
+  "scripts": {
+    "start": "node proxy-server.js",
+    "backend:3001": "node backend.js 3001",
+    "backend:3002": "node backend.js 3002",
+    "backend:3003": "node backend.js 3003",
+    "traffic": "node traffic-generator.js"
+  },
+  "keywords": [
+    "load-balancer",
+    "reverse-proxy",
+    "zero-dependency",
+    "circuit-breaker",
+    "rate-limiter",
+    "websocket",
+    "tracing"
+  ],
+  "author": "Swaraj Prajapati",
+  "license": "MIT"
+}

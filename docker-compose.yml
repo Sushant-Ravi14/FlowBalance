@@ -1,0 +1,22 @@
+﻿version: '3.8'
+
+services:
+  flowbalance:
+    build: .
+    container_name: flowbalance_hub
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - HOST=0.0.0.0
+      - ALGORITHM=round-robin
+      - RATE_LIMIT_RPS=20
+      - RATE_LIMIT_BURST=40
+      - CB_FAILURE_THRESHOLD=5
+      - CB_COOLDOWN_MS=10000
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http = require('http'); http.get('http://127.0.0.1:8080/traces', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1));"]
+      interval: 20s
+      timeout: 3s
+      retries: 3

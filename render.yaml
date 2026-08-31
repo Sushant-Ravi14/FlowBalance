@@ -1,0 +1,16 @@
+﻿services:
+  - type: web
+    name: flowbalance
+    env: node
+    plan: free
+    buildCommand: ""
+    startCommand: node proxy-server.js
+    envVars:
+      - key: PORT
+        sync: false
+      - key: ALGORITHM
+        value: round-robin
+      - key: RATE_LIMIT_RPS
+        value: "20"
+      - key: RATE_LIMIT_BURST
+        value: "40"

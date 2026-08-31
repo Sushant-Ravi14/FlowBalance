@@ -107,51 +107,33 @@ Every single tier of FlowBalance replaces common npm packages with pure Node.js 
 
 ---
 
-## ⚡ Quick Start & Run Guide
+## ⚡ 1-Step Quick Start & Run Guide
 
-### 1. Clone the Repository
-```bash
-git clone https://github.com/Sushant-Ravi14/FlowBalance.git
-cd FlowBalance
-```
+FlowBalance now includes a **100% UI-Controllable Demo Deck** — you can run the entire demo from the browser without touching multiple terminals!
 
-### 2. Launch in 4 Terminals (or Split Terminal)
-
-#### **Terminal 1 — Backend Node A**
-```bash
-node -e "const http=require('http');http.createServer((req,res)=>{const d=50+Math.floor(Math.random()*100);setTimeout(()=>{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({server:'A',delay:d}));},d);}).listen(3001,()=>console.log('✅ Backend A running on http://localhost:3001'));"
-```
-
-#### **Terminal 2 — Backend Node B**
-```bash
-node -e "const http=require('http');http.createServer((req,res)=>{const d=80+Math.floor(Math.random()*120);setTimeout(()=>{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({server:'B',delay:d}));},d);}).listen(3002,()=>console.log('✅ Backend B running on http://localhost:3002'));"
-```
-
-#### **Terminal 3 — FlowBalance Proxy Server**
+### 1. Launch FlowBalance Proxy (Auto-Bootstraps Backends)
 ```bash
 node proxy-server.js
 ```
+*(All 3 backend nodes are automatically managed and ready).*
 
-#### **Terminal 4 — Traffic Generator**
-```bash
-node traffic-generator.js
-```
-
-### 3. Open the Cyberpunk Dashboard
-Navigate to **`http://localhost:8080`** in your browser to inspect live traffic, topologies, latencies, and request waterfalls.
+### 2. Open the Cyberpunk Dashboard
+Navigate to **`http://localhost:8080`** in your browser.
 
 ---
 
-## 🎬 Live Hackathon Demo Walkthrough
+## 🎬 Zero-Terminal Demo Walkthrough (Perfect for Video Recording)
 
-| Step | Action | What to Observe on Screen |
+Everything is controllable right from the top **Control Deck**:
+
+| Step | Action on UI | What to Observe on Screen |
 |---|---|---|
-| **1. Load Balancing** | Start all 4 terminals | Traffic splits evenly between Backend A & B on the Canvas topology visualizer with animated glowing particles. |
-| **2. Failover & Resilience** | Kill Backend A (`Ctrl+C` in Terminal 1) | Backend A immediately turns **RED** on the dashboard. Zero dropped requests in the traffic generator — all traffic automatically redirects to Backend B. |
-| **3. Self-Healing** | Restart Backend A in Terminal 1 | Health checks detect recovery within 2.5s; node turns **GREEN** and resumes receiving balanced traffic. |
-| **4. Rate Limiting Protection** | Click **⚡ Burst Test (5x)** on Dashboard | Token bucket exhausts; Event log displays `429 LIMIT — 🛑 Client rate limited` with `Retry-After` seconds. |
-| **5. Distributed Tracing** | Click any Request ID in Traces panel | Real-time horizontal waterfall displays exact timing breakdown across all 6 lifecycle stages. |
-| **6. Raw JSON Diagnostic** | Click `GET /trace/:id ↗` or `curl http://localhost:8080/traces` | Returns complete structured lifecycle telemetry with microsecond offsets. |
+| **1. Flood Multi-Traffic** | Click **`🚀 Start Multi-Traffic`** (Choose Normal / Heavy / Turbo) | Glowing particle streams flood from Client → Proxy → All 3 Backends. Throughput counter & 60 FPS bezier latency chart spike in real time. |
+| **2. Dynamic Failover** | Click **`Server A (:3001)`** to kill it | Node A turns **RED** on the topology graph. Zero dropped requests — all traffic instantly re-routes to Server B & C. |
+| **3. Self-Healing** | Click **`Server A (:3001)`** to restart it | Health checks detect recovery within 2.5s; Node A turns **GREEN** and resumes receiving balanced traffic. |
+| **4. Live Algorithm Switching** | Click **`⚡ Proxy :8080`** button | Switches between `ROUND-ROBIN` and `LEAST-CONNECTIONS` in real time with instant visual feedback. |
+| **5. Rate Limiting Protection** | Click **`⚡ Burst Test`** button | Token bucket exhausts; Event log displays `429 LIMIT — 🛑 Client rate limited` with `Retry-After` seconds. |
+| **6. Distributed Tracing** | Click any Request ID in Traces panel | Real-time horizontal waterfall displays exact microsecond timing breakdown across all 6 lifecycle stages. |
 
 ---
 
