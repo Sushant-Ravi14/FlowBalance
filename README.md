@@ -109,13 +109,13 @@ Every single tier of FlowBalance replaces common npm packages with pure Node.js 
 
 ## ⚡ 1-Step Quick Start & Run Guide
 
-FlowBalance now includes a **100% UI-Controllable Demo Deck** — you can run the entire demo from the browser without touching multiple terminals!
+FlowBalance includes a **100% UI-Controllable Demo Deck** — you can run the entire demo from the browser without touching multiple terminals!
 
 ### 1. Launch FlowBalance Proxy (Auto-Bootstraps Backends)
 ```bash
 node proxy-server.js
 ```
-*(All 3 backend nodes are automatically managed and ready).*
+*(All 3 backend nodes are automatically bootstrapped and managed in the background).*
 
 ### 2. Open the Cyberpunk Dashboard
 Navigate to **`http://localhost:8080`** in your browser.
@@ -126,14 +126,89 @@ Navigate to **`http://localhost:8080`** in your browser.
 
 Everything is controllable right from the top **Control Deck**:
 
-| Step | Action on UI | What to Observe on Screen |
+| Control / Action | Under-The-Hood Action | What to Observe on Screen |
 |---|---|---|
-| **1. Flood Multi-Traffic** | Click **`🚀 Start Multi-Traffic`** (Choose Normal / Heavy / Turbo) | Glowing particle streams flood from Client → Proxy → All 3 Backends. Throughput counter & 60 FPS bezier latency chart spike in real time. |
-| **2. Dynamic Failover** | Click **`Server A (:3001)`** to kill it | Node A turns **RED** on the topology graph. Zero dropped requests — all traffic instantly re-routes to Server B & C. |
-| **3. Self-Healing** | Click **`Server A (:3001)`** to restart it | Health checks detect recovery within 2.5s; Node A turns **GREEN** and resumes receiving balanced traffic. |
-| **4. Live Algorithm Switching** | Click **`⚡ Proxy :8080`** button | Switches between `ROUND-ROBIN` and `LEAST-CONNECTIONS` in real time with instant visual feedback. |
-| **5. Rate Limiting Protection** | Click **`⚡ Burst Test`** button | Token bucket exhausts; Event log displays `429 LIMIT — 🛑 Client rate limited` with `Retry-After` seconds. |
-| **6. Distributed Tracing** | Click any Request ID in Traces panel | Real-time horizontal waterfall displays exact microsecond timing breakdown across all 6 lifecycle stages. |
+| **1. `🚀 Start Multi-Traffic`** | Launches parallel asynchronous traffic streams (5, 15, or 30 req/s Turbo) | Glowing neon particle streams flood from Client → Proxy → All 3 Backends. Throughput counter & 60 FPS bezier latency chart spike in real time. |
+| **2. `Node 3001` (Kill)** | Terminates Backend Node 3001 child process | Node 3001 turns **RED** on the topology graph. Zero dropped requests — all traffic instantly re-routes to Server B & C. |
+| **3. `Node 3001` (Revive)** | Spawns Backend Node 3001 | Health checks detect recovery within 2.5s; Node A turns **GREEN** and resumes receiving balanced traffic. |
+| **4. `⚡ Proxy :8080`** | Toggles load-balancing algorithm in memory & broadcasts via WebSocket | Switches between `ROUND-ROBIN` and `LEAST-CONNECTIONS` in real time with instant visual feedback. |
+| **5. `⚡ Burst Test (10x)`** | Fires 10 simultaneous requests to exhaust the token bucket | Token bucket exhausts; Event log displays `429 LIMIT — 🛑 Client rate limited` with `Retry-After` seconds. |
+| **6. Traces Panel Waterfall** | Click any Request ID in Traces panel | Real-time horizontal waterfall displays exact microsecond timing breakdown across all 6 lifecycle stages. |
+
+---
+
+## 🔌 Circuit Breaker Mechanics: `CLOSED`, `OPEN`, `HALF_OPEN`
+
+FlowBalance implements a hand-rolled 3-state Circuit Breaker state machine (zero npm libraries — replaces `opossum` and `cockatiel`):
+
+```
+                  ┌────────────────────────────────────────┐
+                  │                                        │
+                  ▼                                        │
+             ┌──────────┐   5 consecutive failures   ┌──────────┐
+             │  CLOSED  │ ─────────────────────────> │   OPEN   │
+             │ (Healthy)│                            │ (Tripped)│
+             └──────────┘                            └──────────┘
+                  ▲                                        │
+                  │  Canary probe succeeds                 │ 10s cooldown expires
+                  │                                        ▼
+                  └────────────────────────────────  ┌───────────┐
+                                                     │ HALF_OPEN │ (CB HALF)
+                       Canary probe fails (Snap back)│ (Canary)  │
+                                                     └───────────┘
+```
+
+1. **`CLOSED` (Normal)**: All traffic flows freely. Failure counter stays at `0`.
+2. **`OPEN` (Tripped)**: After 5 consecutive failures, the circuit trips. The proxy fails fast immediately and stops sending requests to the dead backend, shielding downstream systems from socket timeout pile-ups.
+3. **`HALF_OPEN` (`CB HALF` - Canary Mode)**: When the 10s cooldown expires, the breaker cautiously sends 1-2 probe requests. If the canary probes succeed (200 OK), it resets to **`CLOSED`**; if they fail, it snaps back to **`OPEN`**.
+
+---
+
+## 🌐 Production Cloud Deployment Guide
+
+FlowBalance is 100% production ready and ships with zero runtime npm dependencies (~45MB container footprint).
+
+### Option A: Free Cloud Host (Render / Railway / Heroku)
+1. Push repository to GitHub.
+2. In [Render.com](https://render.com) or [Railway.app](https://railway.app), click **New Web Service** → Connect your GitHub repo.
+3. FlowBalance will automatically detect `render.yaml` or `Procfile`:
+   - **Build Command**: *(leave empty)*
+   - **Start Command**: `node proxy-server.js`
+
+### Option B: Docker / Docker Compose
+```bash
+# 1-command build and container launch
+docker compose up --build -d
+```
+Dashboard available at: `http://localhost:8080`
+
+### Option C: Fly.io (Global Edge Deployment)
+```bash
+fly launch
+fly deploy
+```
+
+### Option D: Linux VPS / PM2
+```bash
+pm2 start proxy-server.js --name "flowbalance"
+pm2 save
+```
+
+---
+
+## ⚙️ Environment Variables Reference
+
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `8080` | Reverse proxy and dashboard listening port |
+| `HOST` | `0.0.0.0` | Binding host address (Docker / Cloud container compatible) |
+| `BACKENDS` | *Internal (3001, 3002, 3003)* | Comma-separated list of target backend nodes (e.g. `10.0.0.1:3001,10.0.0.2:3002`) |
+| `ALGORITHM` | `round-robin` | Routing algorithm (`round-robin` or `least-connections`) |
+| `RATE_LIMIT_RPS` | `20` | Token bucket replenishment rate (requests per second per client IP) |
+| `RATE_LIMIT_BURST` | `40` | Maximum burst capacity before HTTP 429 is enforced |
+| `CB_FAILURE_THRESHOLD`| `5` | Consecutive failures before circuit trips to `OPEN` |
+| `CB_COOLDOWN_MS` | `10000` | Cooldown duration before attempting canary `HALF_OPEN` probe |
+| `AUTO_START_BACKENDS` | `true` | Auto-start internal managed backend nodes on boot (set `false` for external services) |
 
 ---
 
@@ -141,14 +216,20 @@ Everything is controllable right from the top **Control Deck**:
 
 ```
 FlowBalance/
-├── proxy-server.js         # Core reverse proxy, HTTP routing, health checks, failover logic
+├── proxy-server.js         # Core reverse proxy, HTTP routing, health checks, process manager
 ├── websocket-server.js      # Hand-rolled RFC 6455 WebSocket server (zero libraries)
 ├── rate-limiter.js         # Token bucket rate limiting engine with auto-pruning
 ├── circuit-breaker.js      # 3-state circuit breaker state machine (CLOSED/OPEN/HALF_OPEN)
 ├── tracer.js               # Distributed request tracer (crypto.randomUUID() + ring buffer)
 ├── traffic-generator.js    # Native ambient load generator & benchmark tool
-├── dashboard.html          # Canvas 2D cyberpunk live monitoring UI & waterfall viewer
+├── dashboard.html          # Canvas 2D cyberpunk live monitoring UI & Control Deck
 ├── dashboard-preview.png   # Dashboard UI preview screenshot
+├── Dockerfile              # Production Alpine container image (~45MB)
+├── docker-compose.yml      # Multi-container orchestration & healthchecks
+├── render.yaml             # Render 1-click cloud blueprint
+├── fly.toml                # Fly.io edge deployment manifest
+├── Procfile                # Heroku / Railway / Render process manifest
+├── package.json            # Node.js manifest & npm scripts (0 runtime dependencies)
 ├── STDLIB.md               # Standard library replacements & dependency defense proof
 └── README.md               # Complete project documentation
 ```
