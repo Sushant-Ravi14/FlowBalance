@@ -243,6 +243,3 @@ FlowBalance/
 
 ---
 
-## 📄 License
-
-MIT License — Built for the Zero-Dependency Hackathon.
