@@ -157,8 +157,8 @@ FlowBalance/
 
 ## 👨‍💻 Authors & Hackathon Team
 
-- **Swaraj Prajapati** ([@SwarajPrajapati2006](https://github.com/SwarajPrajapati2006)) — *Architect & Developer*
-- **Sushant Ravi** ([@Sushant-Ravi14](https://github.com/Sushant-Ravi14))
+- **Swaraj Prajapati** ([@SwarajPrajapati2006](https://github.com/SwarajPrajapati2006)) — *Advanced Features (Rate Limiting, Circuit Breaker, WebSockets), UI Dashboard & Documentation*
+- **Sushant Ravi** ([@Sushant-Ravi14](https://github.com/Sushant-Ravi14)) — *Core Proxy Server Architecture, Load Balancing Algorithms, Health Checks, Traffic Generator & Deployment*
 
 ---
 
